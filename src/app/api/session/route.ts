@@ -1,4 +1,5 @@
 import { authenticated, createSession, passwordMatches, sessionCookie } from "@/lib/auth";
+import { sameOrigin } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
@@ -10,13 +11,8 @@ export function GET(request: Request) {
   return reply({ authenticated: authenticated(request), configured: !!process.env.APP_PASSWORD, hasServerKey: !!process.env.OPENROUTER_API_KEY, defaultModel: process.env.OPENROUTER_MODEL || "openai/gpt-4o-mini" });
 }
 
-function originAllowed(request: Request) {
-  const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
-}
-
 export async function POST(request: Request) {
-  if (!originAllowed(request)) return reply({ error: "Request origin is not allowed." }, 403);
+  if (!sameOrigin(request)) return reply({ error: "Request origin is not allowed." }, 403);
   const password = process.env.APP_PASSWORD;
   if (!password) return reply({ error: "Set APP_PASSWORD on the server and restart to enable sign-in." }, 503);
   try {
@@ -49,6 +45,6 @@ export async function POST(request: Request) {
 }
 
 export function DELETE(request: Request) {
-  if (!originAllowed(request)) return reply({ error: "Request origin is not allowed." }, 403);
+  if (!sameOrigin(request)) return reply({ error: "Request origin is not allowed." }, 403);
   return reply({ authenticated: false }, 200, sessionCookie(""));
 }

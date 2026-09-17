@@ -2,7 +2,18 @@ export function sameOrigin(request: Request): boolean {
   const origin = request.headers.get("origin");
   if (!origin) return true;
   try {
-    return new URL(origin).origin === new URL(request.url).origin;
+    const requestUrl = new URL(request.url);
+    const allowed = new Set([requestUrl.origin]);
+    const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    if (configuredUrl) allowed.add(new URL(configuredUrl).origin);
+
+    const forwardedHost = request.headers.get("x-forwarded-host")?.split(",", 1)[0]?.trim();
+    const forwardedProto = request.headers.get("x-forwarded-proto")?.split(",", 1)[0]?.trim();
+    if (forwardedHost && (forwardedProto === "http" || forwardedProto === "https")) {
+      allowed.add(`${forwardedProto}://${forwardedHost}`);
+    }
+
+    return allowed.has(new URL(origin).origin);
   } catch {
     return false;
   }
