@@ -1,0 +1,13 @@
+services:
+  naturallyaspiratedlearn:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    volumes:
+      - naturallyaspiratedlearn-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  naturallyaspiratedlearn-data:

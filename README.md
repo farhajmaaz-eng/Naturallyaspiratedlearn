@@ -1,36 +1,98 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<p align="center">
+  <img src="src/app/icon.svg" width="84" height="84" alt="Naturallyaspiratedlearn monogram" />
+</p>
 
-## Getting Started
+<h1 align="center">Naturallyaspiratedlearn</h1>
 
-First, run the development server:
+<p align="center"><strong>Why have a turbochargee when you are naturally aspirated</strong></p>
+
+<p align="center">A private, open-source study workspace that turns your own material into notes, flashcards, quizzes, source-grounded chat, and a narrated audio review.</p>
+
+## What it does
+
+Bring in a PDF, a text or Markdown file, or pasted source material. Naturallyaspiratedlearn uses an OpenRouter model to create structured notes, then keeps every study mode attached to the same source.
+
+- Editable Markdown notes with tables, code, math, and syntax highlighting
+- Active-recall flashcards with simple spaced review scheduling
+- Multiple-choice quizzes with answer explanations
+- Source-grounded chat with bounded conversation history
+- Two-host audio-review scripts read with the browser's native speech engine
+- Folders, search, recent materials, and a responsive mobile layout
+- Optional workspace password and per-browser OpenRouter keys
+- Local SQLite persistence with no account service or analytics dependency
+
+The product workflow is inspired by study tools such as Turbo AI, but the implementation, branding, visual system, copy, and source code are original. This project is not affiliated with or endorsed by TurboLearn LLC.
+
+## Quick start
+
+Requirements: Node.js 22 or newer and an [OpenRouter API key](https://openrouter.ai/keys).
 
 ```bash
+git clone https://github.com/farhajmaaz-eng/Naturallyaspiratedlearn.git
+cd Naturallyaspiratedlearn
+npm install
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`. You can put `OPENROUTER_API_KEY` in `.env.local`, or leave it blank and add a key through **Settings**. A browser-supplied key stays in that browser's local storage and is forwarded by your server only for OpenRouter requests; it is never written to SQLite.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+For a shared deployment, set a strong `APP_PASSWORD`. When it is blank, the workspace opens without a sign-in screen.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Configuration
 
-## Learn More
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `OPENROUTER_API_KEY` | No | Shared server-side key; browser keys can be used instead |
+| `OPENROUTER_MODEL` | No | Server default, `openai/gpt-4o-mini` when omitted |
+| `APP_PASSWORD` | No | Enables the single-workspace sign-in screen |
+| `DATABASE_PATH` | No | SQLite file path, defaults to `data/study.db` |
+| `NEXT_PUBLIC_SITE_URL` | No | Public URL sent in OpenRouter attribution headers |
 
-To learn more about Next.js, take a look at the following resources:
+The model selector includes a few practical presets. Any valid OpenRouter model identifier can also be sent through the API.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Docker
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Create `.env.local` from the example, then run:
 
-## Deploy on Vercel
+```bash
+docker compose up --build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+The compose file stores SQLite data in a named volume. The application listens on port 3000.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## How it is built
+
+The app uses Next.js 16, React 19, TypeScript, SQLite through `better-sqlite3`, and the OpenRouter chat-completions API. PDFs are parsed locally before their text is sent to the chosen model. Notes and study artifacts stay in the configured SQLite database.
+
+The server applies upload and body-size limits, validates structured AI output, limits concurrent AI calls, rejects cross-origin mutations, uses `HttpOnly` signed session cookies when password protection is enabled, and treats uploaded material as untrusted prompt data.
+
+Audio review intentionally uses the browser's speech synthesis rather than a second paid provider. Available voices and playback quality depend on the device.
+
+## Development
+
+```bash
+npm run lint
+npm test
+npm run build
+```
+
+The unit suite covers session signing, input validation, rate limiting, and OpenRouter key/model resolution. A live OpenRouter call is not run in CI because it would require a funded secret.
+
+## Current input support
+
+PDF, plain text, Markdown, and pasted text are supported today. Audio/video transcription and YouTube ingestion need a dedicated transcription or transcript service and are good candidates for community contributions.
+
+## Data and deployment notes
+
+This is a single-workspace application. It does not isolate data between multiple users. Password protection controls access to the whole workspace.
+
+SQLite works well on a local machine, VPS, home server, Railway volume, Fly volume, or another host with persistent disk. A default serverless filesystem is ephemeral; use persistent storage or replace the database adapter before deploying there.
+
+## Contributing
+
+Issues and pull requests are welcome. Keep product copy specific, preserve keyboard and mobile behavior, and add tests when changing security boundaries, parsers, persistence, or AI-response validation.
+
+## License
+
+[MIT](LICENSE)
