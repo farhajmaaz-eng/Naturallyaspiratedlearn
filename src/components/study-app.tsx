@@ -352,10 +352,51 @@ function Listen({ note, busy, onGenerate }: { note: Note; busy: boolean; onGener
 }
 
 function Chat({ note, headers, onUpdate, onError, onNeedKey, hasKey }: { note: Note; headers: (json?: boolean) => Record<string, string>; onUpdate: (note: Note) => void; onError: (message: string) => void; onNeedKey: () => void; hasKey: boolean }) {
-  const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false); const bottom = useRef<HTMLDivElement>(null);
-  useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [note.messages, busy]);
-  async function send(event: FormEvent) { event.preventDefault(); if (!message.trim() || busy) return; if (!hasKey) return onNeedKey(); const next = message.trim(); setMessage(""); setBusy(true); try { const response = await fetch(`/api/notes/${note.id}/chat`, { method: "POST", headers: headers(true), body: JSON.stringify({ message: next }) }); const data = await responseJson(response); if (!response.ok) throw new Error(data.error || "Could not send your question."); onUpdate(data.note); } catch (error) { onError(messageOf(error)); setMessage(next); } finally { setBusy(false); } }
-  return <section className="chat-panel"><div className="chat-intro"><div><Icon name="message"/></div><h2>Ask this source</h2><p>Answers stay grounded in the material you brought in.</p></div><div className="message-list">{!note.messages.length && <div className="suggestion-row">{["Explain the main idea simply", "What should I memorize?", "Give me an example"].map((text) => <button key={text} onClick={() => setMessage(text)}>{text}</button>)}</div>}{note.messages.map((item, index) => <div key={index} className={`message message-${item.role}`}>{item.role === "assistant" ? <Markdown compact>{item.content}</Markdown> : item.content}</div>)}{busy && <div className="message message-assistant typing"><i/><i/><i/></div>}<div ref={bottom}/></div><form className="chat-composer" onSubmit={send}><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask about a concept, formula, or passage…" rows={2}/><button aria-label="Send message" disabled={!message.trim() || busy}><Icon name="send"/></button></form></section>;
+  const [message, setMessage] = useState("");
+  const [pending, setPending] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const list = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (list.current) list.current.scrollTop = list.current.scrollHeight;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [note.messages.length, pending, busy]);
+
+  async function send(event: FormEvent) {
+    event.preventDefault();
+    if (!message.trim() || busy) return;
+    if (!hasKey) return onNeedKey();
+    const next = message.trim();
+    setMessage("");
+    setPending(next);
+    setError("");
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/notes/${note.id}/chat`, {
+        method: "POST",
+        headers: headers(true),
+        body: JSON.stringify({ message: next }),
+      });
+      const data = await responseJson(response);
+      if (!response.ok) throw new Error(data.error || "Could not send your question.");
+      if (!data.note || !Array.isArray(data.note.messages)) throw new Error("The server returned an incomplete reply.");
+      onUpdate(data.note);
+      setPending(null);
+    } catch (caught) {
+      const text = messageOf(caught);
+      setError(text);
+      setMessage(next);
+      setPending(null);
+      onError(text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <section className="chat-panel"><div className="chat-intro"><div><Icon name="message"/></div><h2>Ask this source</h2><p>Answers stay grounded in the material you brought in.</p></div><div className="message-list" ref={list} aria-live="polite">{!note.messages.length && !pending && <div className="suggestion-row">{["Explain the main idea simply", "What should I memorize?", "Give me an example"].map((text) => <button type="button" key={text} onClick={() => setMessage(text)}>{text}</button>)}</div>}{note.messages.map((item, index) => <div key={`${item.role}-${index}`} className={`message message-${item.role}`}>{item.role === "assistant" ? <Markdown compact>{item.content}</Markdown> : item.content}</div>)}{pending && <div className="message message-user message-pending">{pending}</div>}{busy && <div className="message message-assistant typing" aria-label="Writing an answer"><i/><i/><i/></div>}</div>{error && <p className="chat-error">{error}</p>}<form className="chat-composer" onSubmit={send}><textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} placeholder="Ask about a concept, formula, or passage…" rows={2}/><button type="submit" aria-label="Send message" disabled={!message.trim() || busy}><Icon name="send"/></button></form><small className="chat-hint">Enter to send · Shift + Enter for a new line</small></section>;
 }
 
 function GeneratorEmpty({ icon, title, copy, label, busy, onClick }: { icon: Parameters<typeof Icon>[0]["name"]; title: string; copy: string; label: string; busy: boolean; onClick: () => void }) {

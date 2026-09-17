@@ -52,9 +52,10 @@ export async function POST(request: Request, { params }: Params) {
       { role: "system", content: chatSystemPrompt() },
       ...history,
       { role: "user", content: `${message}\n\n${sourceBlock(note.source)}` },
-    ]);
+    ], { temperature: 0.3, maxTokens: 1_200 });
     const messages = [...note.messages, { role: "user" as const, content: message }, { role: "assistant" as const, content: reply }].slice(-MAX_MESSAGES);
     const updated = touchNote(id, { messages });
+    if (!updated) return fail("The note is no longer available.", 404);
     return Response.json({ note: updated }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof UpstreamError) return fail(error.message, error.status);
