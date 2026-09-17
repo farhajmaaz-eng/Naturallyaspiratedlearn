@@ -1,4 +1,3 @@
-import { PDFParse } from "pdf-parse";
 import { MAX_PDF_PAGES, MAX_SOURCE_CHARS } from "./limits";
 
 const TEXT_EXTENSIONS = /\.(txt|md|markdown)$/i;
@@ -17,8 +16,10 @@ export async function extractSource(file: File): Promise<ParsedSource> {
   if (isPdf) {
     if (file.size > 10 * 1024 * 1024) throw new SourceError("PDF exceeds the 10MB size limit.");
     const buffer = Buffer.from(await file.arrayBuffer());
-    let parser: PDFParse | null = null;
+    let parser: import("pdf-parse").PDFParse | null = null;
     try {
+      await import("@napi-rs/canvas");
+      const { PDFParse } = await import("pdf-parse");
       parser = new PDFParse({ data: new Uint8Array(buffer) });
       const info = await parser.getInfo();
       const total = info.total ?? 0;

@@ -8,6 +8,7 @@ import type { Folder, Note } from "@/lib/types";
 type Session = { authenticated: boolean; configured: boolean; hasServerKey: boolean; defaultModel: string };
 type Tab = "notes" | "flashcards" | "quiz" | "listen" | "chat";
 type Toast = { kind: "error" | "success"; message: string } | null;
+type ApiResponse = Session & { error?: string; note: Note; notes: Note[]; folders: Folder[]; folder: Folder };
 
 const MODELS = [
   { value: "openai/gpt-4o-mini", label: "GPT-4o mini", note: "Fast and economical" },
@@ -35,11 +36,11 @@ export function StudyApp() {
     setLoading(true);
     try {
       const sessionResponse = await fetch("/api/session", { cache: "no-store" });
-      const nextSession = (await sessionResponse.json()) as Session;
+      const nextSession = await responseJson(sessionResponse);
       setSession(nextSession);
       if (nextSession.authenticated) {
         const response = await fetch("/api/notes", { cache: "no-store" });
-        const data = await response.json();
+        const data = await responseJson(response);
         if (!response.ok) throw new Error(data.error || "Could not load your library.");
         setNotes(data.notes ?? []);
         setFolders(data.folders ?? []);
@@ -112,7 +113,7 @@ export function StudyApp() {
           if (!name?.trim()) return;
           try {
             const response = await fetch("/api/folders", { method: "POST", headers: headers(true), body: JSON.stringify({ name }) });
-            const data = await response.json();
+            const data = await responseJson(response);
             if (!response.ok) throw new Error(data.error);
             setFolders((current) => [...current, data.folder].sort((a, b) => a.name.localeCompare(b.name)));
           } catch (error) { setToast({ kind: "error", message: messageOf(error) }); }
@@ -263,7 +264,7 @@ function NoteWorkspace(props: {
       const response = await fetch(`/api/notes/${props.note.id}/generate`, {
         method: "POST", headers: props.headers(true), body: JSON.stringify({ kind, model: undefined }),
       });
-      const data = await response.json();
+      const data = await responseJson(response);
       if (!response.ok) throw new Error(data.error || "Generation failed.");
       props.onUpdate(data.note);
       props.onSuccess(kind === "podcast" ? "Audio review script created." : `${capitalize(kind)} created.`);
@@ -275,7 +276,7 @@ function NoteWorkspace(props: {
     setBusy("save");
     try {
       const response = await fetch(`/api/notes/${props.note.id}`, { method: "PATCH", headers: props.headers(true), body: JSON.stringify({ content: draft }) });
-      const data = await response.json();
+      const data = await responseJson(response);
       if (!response.ok) throw new Error(data.error);
       props.onUpdate(data.note); setEditing(false); props.onSuccess("Notes saved.");
     } catch (error) { props.onError(messageOf(error)); }
@@ -307,7 +308,7 @@ function NoteWorkspace(props: {
         )}
         {tab === "flashcards" && <Flashcards key={`-`} note={props.note} busy={busy === "flashcards"} onGenerate={() => generate("flashcards")} onPersist={async (flashcards) => {
           const response = await fetch(`/api/notes/${props.note.id}`, { method: "PATCH", headers: props.headers(true), body: JSON.stringify({ flashcards }) });
-          const data = await response.json(); if (response.ok) props.onUpdate(data.note);
+          const data = await responseJson(response); if (response.ok) props.onUpdate(data.note);
         }} />}
         {tab === "quiz" && <Quiz key={`-`} note={props.note} busy={busy === "quiz"} onGenerate={() => generate("quiz")} />}
         {tab === "listen" && <Listen note={props.note} busy={busy === "podcast"} onGenerate={() => generate("podcast")} />}
@@ -353,7 +354,7 @@ function Listen({ note, busy, onGenerate }: { note: Note; busy: boolean; onGener
 function Chat({ note, headers, onUpdate, onError, onNeedKey, hasKey }: { note: Note; headers: (json?: boolean) => Record<string, string>; onUpdate: (note: Note) => void; onError: (message: string) => void; onNeedKey: () => void; hasKey: boolean }) {
   const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false); const bottom = useRef<HTMLDivElement>(null);
   useEffect(() => bottom.current?.scrollIntoView({ behavior: "smooth" }), [note.messages, busy]);
-  async function send(event: FormEvent) { event.preventDefault(); if (!message.trim() || busy) return; if (!hasKey) return onNeedKey(); const next = message.trim(); setMessage(""); setBusy(true); try { const response = await fetch(`/api/notes/${note.id}/chat`, { method: "POST", headers: headers(true), body: JSON.stringify({ message: next }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); onUpdate(data.note); } catch (error) { onError(messageOf(error)); setMessage(next); } finally { setBusy(false); } }
+  async function send(event: FormEvent) { event.preventDefault(); if (!message.trim() || busy) return; if (!hasKey) return onNeedKey(); const next = message.trim(); setMessage(""); setBusy(true); try { const response = await fetch(`/api/notes/${note.id}/chat`, { method: "POST", headers: headers(true), body: JSON.stringify({ message: next }) }); const data = await responseJson(response); if (!response.ok) throw new Error(data.error || "Could not send your question."); onUpdate(data.note); } catch (error) { onError(messageOf(error)); setMessage(next); } finally { setBusy(false); } }
   return <section className="chat-panel"><div className="chat-intro"><div><Icon name="message"/></div><h2>Ask this source</h2><p>Answers stay grounded in the material you brought in.</p></div><div className="message-list">{!note.messages.length && <div className="suggestion-row">{["Explain the main idea simply", "What should I memorize?", "Give me an example"].map((text) => <button key={text} onClick={() => setMessage(text)}>{text}</button>)}</div>}{note.messages.map((item, index) => <div key={index} className={`message message-${item.role}`}>{item.role === "assistant" ? <Markdown compact>{item.content}</Markdown> : item.content}</div>)}{busy && <div className="message message-assistant typing"><i/><i/><i/></div>}<div ref={bottom}/></div><form className="chat-composer" onSubmit={send}><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Ask about a concept, formula, or passage…" rows={2}/><button aria-label="Send message" disabled={!message.trim() || busy}><Icon name="send"/></button></form></section>;
 }
 
@@ -363,7 +364,7 @@ function GeneratorEmpty({ icon, title, copy, label, busy, onClick }: { icon: Par
 
 function CreateDialog({ folders, hasKey, headers, onNeedKey, onClose, onCreated }: { folders: Folder[]; hasKey: boolean; headers: (json?: boolean) => Record<string, string>; onNeedKey: () => void; onClose: () => void; onCreated: (note: Note) => void }) {
   const [mode, setMode] = useState<"file" | "text">("file"); const [file, setFile] = useState<File | null>(null); const [text, setText] = useState(""); const [title, setTitle] = useState(""); const [folderId, setFolderId] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState(""); const input = useRef<HTMLInputElement>(null);
-  async function submit(event: FormEvent) { event.preventDefault(); if (!hasKey) return onNeedKey(); if (mode === "file" && !file) return setError("Choose a PDF, TXT, or Markdown file."); if (mode === "text" && !text.trim()) return setError("Paste some material first."); setBusy(true); setError(""); const body = new FormData(); if (file && mode === "file") body.set("file", file); else body.set("text", text); if (title.trim()) body.set("title", title.trim()); if (folderId) body.set("folderId", folderId); try { const response = await fetch("/api/notes", { method: "POST", headers: headers(), body }); const data = await response.json(); if (!response.ok) throw new Error(data.error); onCreated(data.note); } catch (error) { setError(messageOf(error)); } finally { setBusy(false); } }
+  async function submit(event: FormEvent) { event.preventDefault(); if (!hasKey) return onNeedKey(); if (mode === "file" && !file) return setError("Choose a PDF, TXT, or Markdown file."); if (mode === "text" && !text.trim()) return setError("Paste some material first."); setBusy(true); setError(""); const body = new FormData(); if (file && mode === "file") body.set("file", file); else body.set("text", text); if (title.trim()) body.set("title", title.trim()); if (folderId) body.set("folderId", folderId); try { const response = await fetch("/api/notes", { method: "POST", headers: headers(), body }); const data = await responseJson(response); if (!response.ok) throw new Error(data.error || "Could not create the study set."); onCreated(data.note); } catch (error) { setError(messageOf(error)); } finally { setBusy(false); } }
   return <Dialog title="Bring in material" subtitle="The source becomes a reusable study workspace." onClose={onClose}><form className="create-form" onSubmit={submit}><div className="mode-switch"><button type="button" className={mode === "file" ? "active" : ""} onClick={() => setMode("file")}><Icon name="upload"/> Upload</button><button type="button" className={mode === "text" ? "active" : ""} onClick={() => setMode("text")}><Icon name="file"/> Paste text</button></div>{mode === "file" ? <button type="button" className={`drop-zone ${file ? "has-file" : ""}`} onClick={() => input.current?.click()}><input ref={input} type="file" accept=".pdf,.txt,.md,.markdown,application/pdf,text/plain,text/markdown" onChange={(event) => setFile(event.target.files?.[0] ?? null)}/><div><Icon name={file ? "check" : "upload"} size={25}/></div><strong>{file ? file.name : "Choose a file"}</strong><span>{file ? readableBytes(file.size) : "PDF, TXT, or Markdown · up to 10MB"}</span></button> : <label className="field"><span>Source material</span><textarea value={text} onChange={(event) => setText(event.target.value)} rows={9} placeholder="Paste lecture notes, an article, a transcript, or anything you want to understand…"/></label>}<div className="form-row"><label className="field"><span>Title <em>optional</em></span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Derived from source"/></label><label className="field"><span>Folder <em>optional</em></span><select value={folderId} onChange={(event) => setFolderId(event.target.value)}><option value="">Unfiled</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label></div>{error && <p className="form-error">{error}</p>}<div className="dialog-actions"><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? <><span className="spinner"/>Reading the source…</> : <><Icon name="spark" size={17}/>Create study set</>}</button></div></form></Dialog>;
 }
 
@@ -374,7 +375,7 @@ function SettingsDialog({ apiKey, model, hasServerKey, onSave, onClose }: { apiK
 
 function LoginScreen({ onSuccess }: { onSuccess: () => void }) {
   const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
-  async function submit(event: FormEvent) { event.preventDefault(); setBusy(true); const response = await fetch("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }) }); const data = await response.json(); if (!response.ok) { setError(data.error || "Could not sign in."); setBusy(false); return; } await onSuccess(); }
+  async function submit(event: FormEvent) { event.preventDefault(); setBusy(true); try { const response = await fetch("/api/session", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }) }); const data = await responseJson(response); if (!response.ok) { setError(data.error || "Could not sign in."); return; } await onSuccess(); } catch (error) { setError(messageOf(error)); } finally { setBusy(false); } }
   return <div className="login-page"><div className="login-card"><BrandMark/><span>PRIVATE WORKSPACE</span><h1>Welcome back.</h1><p>Enter the password for this Naturallyaspiratedlearn instance.</p><form onSubmit={submit}><input autoFocus type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Workspace password"/>{error && <small>{error}</small>}<button className="primary-button" disabled={busy}>{busy ? "Opening…" : "Open workspace"}</button></form></div></div>;
 }
 
@@ -385,6 +386,15 @@ function Dialog({ title, subtitle, onClose, children }: { title: string; subtitl
 
 function BrandMark() { return <div className="brand-mark" aria-hidden="true"><svg viewBox="0 0 40 40"><path d="M8 29V11l12 18V11l12 18V11"/><path d="M8 33h24"/></svg></div>; }
 function LoadingScreen() { return <div className="loading-screen"><BrandMark/><span className="spinner dark"/></div>; }
+async function responseJson(response: Response): Promise<ApiResponse> {
+  const body = await response.text();
+  if (!body.trim()) throw new Error(`The server returned an empty response (${response.status}). Please try again.`);
+  try {
+    return JSON.parse(body) as ApiResponse;
+  } catch {
+    throw new Error(`The server returned an invalid response (${response.status}). Please try again.`);
+  }
+}
 function messageOf(error: unknown) { return error instanceof Error ? error.message : "Something went wrong. Please try again."; }
 function capitalize(value: string) { return value.charAt(0).toUpperCase() + value.slice(1); }
 function relativeDate(value: string) { const diff = Date.now() - new Date(value).getTime(); const minutes = Math.floor(diff / 60000); if (minutes < 1) return "just now"; if (minutes < 60) return `${minutes}m ago`; const hours = Math.floor(minutes / 60); if (hours < 24) return `${hours}h ago`; const days = Math.floor(hours / 24); return days === 1 ? "yesterday" : `${days}d ago`; }
