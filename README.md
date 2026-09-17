@@ -4,7 +4,7 @@
 
 <h1 align="center">Naturallyaspiratedlearn</h1>
 
-<p align="center"><strong>Why have a turbochargee when you are naturally aspirated</strong></p>
+<p align="center"><strong>Why have a turbocharger when you are naturally aspirated</strong></p>
 
 <p align="center">A private, open-source study workspace that turns your own material into notes, flashcards, quizzes, source-grounded chat, and a narrated audio review.</p>
 
